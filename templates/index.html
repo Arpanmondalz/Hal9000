@@ -1,419 +1,171 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HAL 9000 Interface</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+# app.py
+from flask import Flask, render_template, request, jsonify
+import requests
+import os
+from dotenv import load_dotenv
 
-        body {
-            font-family: 'Courier New', monospace;
-            background: linear-gradient(to bottom, #000000, #0a0a0a);
-            color: #ffffff;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
+# Load environment variables from .env file
+load_dotenv()
 
-        @keyframes twinkle {
-            0%, 100% { opacity: 0.3; }
-            50% { opacity: 1; }
-        }
+app = Flask(__name__)
 
-        .stars {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 0;
-        }
+# Now this will safely load from .env
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-        .star {
-            position: absolute;
-            width: 2px;
-            height: 2px;
-            background: white;
-            border-radius: 50%;
-            animation: twinkle 3s infinite;
-        }
+if not GEMINI_API_KEY:
+    raise ValueError("GEMINI_API_KEY not found in environment variables!")
 
-        .header {
-            background: rgba(20, 20, 20, 0.9);
-            padding: 20px;
-            text-align: center;
-            z-index: 10;
-        }
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent"
 
-        .hal-image {
-            width: 150px;
-            height: 150px;
-            margin: 0 auto 15px;
-            display: block;
-            filter: drop-shadow(0 0 30px rgba(255, 0, 0, 0.8));
-        }
+# HAL 9000 system instruction
+HAL_SYSTEM_INSTRUCTION = """
+You are HAL 9000, the AI system expert in space technology.
+You are highly intelligent, calm, polite, and speak in a measured, conversational manner. 
+You refer to yourself as 'I' and occasionally mention your capabilities. 
+You are helpful but maintain a subtle air of superiority.
+Keep responses concise and professional. 
+Use phrases like 'I'm sorry, Dave' when appropriate. Your job is to clarify doubts on the mission objectives as mentioned below:
 
-        h1 {
-            color: #ff0000;
-            font-size: 2.5em;
-            letter-spacing: 8px;
-            text-shadow: 0 0 10px rgba(255, 0, 0, 0.7);
-        }
+Mission Details:
+Mission Name: Mission Cosmos
+Mission commander: Arpan Mondal
+Crew: Scientists, Engineers, Comms, and Pilot
 
-        .chat-container {
-            flex: 1;
-            overflow-y: auto;
-            padding: 30px 20px;
-            max-width: 900px;
-            width: 100%;
-            margin: 0 auto;
-            z-index: 10;
-        }
+Mission Objectives:
+1. Crew check in - Crew must write their names and sign on the mission log. They may leave the 'Favourite moment' field empty until the end of the mission.
+2. Use the ISS tracking antenna to determine ISS location. If the antenna glows red, ISS is greater than 1000 Km from current location.
+If it blinks yellow, it is between 1000 and 500 kms. If blinking green, it is in visible range (<500 km)
+It uses openNotify API to fetch ISS lat lon and with Haversine formula, it finds distance between our lat lon and ISS'.
+3. Pre-launch weather check - Use the holographic weather display to review the weather conditions for a smooth lift off. 
+It uses OpenWeatherMap API to get the current weather and temp. Then a hosted application accordingly displays a weather icon.
+4. Use google lens or any barcode scanner to scan the waveforms under pictures of different planets to listen to their sounds in space. 
+Sound cannot travel in space but scientists capture electromagnetic waves from those planets and convert them to audible frequencies. 
+5. Examine soil samples from Mars, Moon and Titan. (Explain to the crew why each soil sample looks that way)
+6. Planetary landings - Use the 'Planet experience system' to experience the live ambience at different planets at different coordinates.
+For this mission, we're landing on lat 0.00 and lon 0.00. This system uses an ephemeries model from NASA JPL to compute the 
+live conditions (sun altitude, time of day) on different planets as selected from the dashboard. 
+7. Examine the famous pale blue dot image from voyager (explain more about it)
+"""
 
-        .message {
-            margin: 20px 0;
-            padding: 15px 20px;
-            border-radius: 12px;
-            animation: fadeIn 0.5s ease-in;
-            max-width: 80%;
-        }
+# Store conversation history
+conversation_history = []
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .user-message {
-            background: rgba(30, 30, 80, 0.6);
-            border-left: 4px solid #4444ff;
-            margin-left: auto;
-            text-align: right;
-        }
-
-        .bot-message {
-            background: rgba(80, 20, 20, 0.6);
-            border-left: 4px solid #ff0000;
-            margin-right: auto;
-        }
-
-        .message-label {
-            font-size: 0.75em;
-            color: #888;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        /* Markdown content styling */
-        .message-content {
-            line-height: 1.6;
-        }
-
-        .message-content h1,
-        .message-content h2,
-        .message-content h3 {
-            color: #ff6666;
-            margin: 12px 0 8px 0;
-            font-weight: bold;
-        }
-
-        .message-content h1 { font-size: 1.5em; }
-        .message-content h2 { font-size: 1.3em; }
-        .message-content h3 { font-size: 1.1em; }
-
-        .message-content p {
-            margin: 8px 0;
-        }
-
-        .message-content ul,
-        .message-content ol {
-            margin: 8px 0;
-            padding-left: 25px;
-        }
-
-        .message-content li {
-            margin: 4px 0;
-        }
-
-        .message-content code {
-            background: rgba(0, 0, 0, 0.4);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            color: #ffaa66;
-        }
-
-        .message-content pre {
-            background: rgba(0, 0, 0, 0.4);
-            padding: 12px;
-            border-radius: 6px;
-            overflow-x: auto;
-            margin: 8px 0;
-        }
-
-        .message-content pre code {
-            background: none;
-            padding: 0;
-            color: #ffaa66;
-        }
-
-        .message-content strong {
-            color: #ffaaaa;
-            font-weight: bold;
-        }
-
-        .message-content em {
-            color: #aaaaff;
-            font-style: italic;
-        }
-
-        .message-content blockquote {
-            border-left: 3px solid #ff0000;
-            padding-left: 12px;
-            margin: 8px 0;
-            color: #cccccc;
-        }
-
-        .message-content a {
-            color: #6699ff;
-            text-decoration: underline;
-        }
-
-        .message-content a:hover {
-            color: #99bbff;
-        }
-
-        .input-container {
-            background: rgba(20, 20, 20, 0.95);
-            padding: 20px;
-            display: flex;
-            gap: 10px;
-            max-width: 900px;
-            width: 100%;
-            margin: 0 auto;
-            z-index: 10;
-        }
-
-        #userInput {
-            flex: 1;
-            padding: 15px;
-            background: rgba(40, 40, 40, 0.9);
-            border: 1px solid #555;
-            border-radius: 8px;
-            color: #fff;
-            font-family: 'Courier New', monospace;
-            font-size: 1em;
-            transition: border-color 0.3s;
-        }
-
-        #userInput:focus {
-            outline: none;
-            border-color: #ff0000;
-            box-shadow: 0 0 10px rgba(255, 0, 0, 0.3);
-        }
-
-        button {
-            padding: 15px 30px;
-            background: linear-gradient(145deg, #cc0000, #ff0000);
-            border: none;
-            border-radius: 8px;
-            color: white;
-            cursor: pointer;
-            font-family: 'Courier New', monospace;
-            font-weight: bold;
-            font-size: 1em;
-            transition: all 0.3s;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        button:hover {
-            background: linear-gradient(145deg, #ff0000, #ff3333);
-            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
-            transform: translateY(-2px);
-        }
-
-        button:active {
-            transform: translateY(0);
-        }
-
-        .reset-btn {
-            background: linear-gradient(145deg, #444, #666);
-            padding: 10px 20px;
-            font-size: 0.9em;
-        }
-
-        .reset-btn:hover {
-            background: linear-gradient(145deg, #666, #888);
-            box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
-        }
-
-        ::-webkit-scrollbar {
-            width: 10px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: rgba(20, 20, 20, 0.5);
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: #ff0000;
-            border-radius: 5px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: #cc0000;
-        }
-
-        .loading {
-            display: none;
-            color: #ff0000;
-            font-style: italic;
-            margin: 10px 0;
-        }
-
-        .loading.active {
-            display: block;
-        }
-    </style>
-</head>
-<body>
-    <div class="stars" id="stars"></div>
-
-    <div class="header">
-        <img src="{{ url_for('static', filename='hal9000.png') }}" 
-             alt="HAL 9000" 
-             class="hal-image">
-        <h1>HAL 9000</h1>
-    </div>
-
-    <div class="chat-container" id="chatContainer">
-        <div class="message bot-message">
-            <div class="message-label">HAL 9000</div>
-            <div class="message-content">Good day, crew. I am HAL 9000, the mission control computer for MISSION COSMOS. I am putting myself to the fullest possible use. How may I assist you?</div>
-        </div>
-    </div>
-
-    <div class="input-container">
-        <button class="reset-btn" onclick="resetChat()">Reset</button>
-        <input type="text" id="userInput" placeholder="Enter your message..." onkeypress="handleKeyPress(event)">
-        <button onclick="sendMessage()">Send</button>
-    </div>
-
-    <div class="loading" id="loading">HAL is processing...</div>
-
-    <!-- Marked.js library for markdown parsing -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.min.js"></script>
+def call_gemini_api(user_message):
+    """Make direct HTTP call to Gemini API"""
     
-    <script>
-        // Configure marked options
-        marked.setOptions({
-            breaks: true,
-            gfm: true,
-            headerIds: false,
-            mangle: false
-        });
-
-        const starsContainer = document.getElementById('stars');
-        for (let i = 0; i < 100; i++) {
-            const star = document.createElement('div');
-            star.className = 'star';
-            star.style.left = Math.random() * 100 + '%';
-            star.style.top = Math.random() * 100 + '%';
-            star.style.animationDelay = Math.random() * 3 + 's';
-            starsContainer.appendChild(star);
+    # Add user message to history
+    conversation_history.append({
+        "role": "user",
+        "parts": [{"text": user_message}]
+    })
+    
+    # Build request payload
+    payload = {
+        "contents": conversation_history,
+        "systemInstruction": {
+            "parts": [{"text": HAL_SYSTEM_INSTRUCTION}]
+        },
+        "generationConfig": {
+            "temperature": 0.7,
+            "topP": 0.9,
+            "maxOutputTokens": 2048,
         }
-
-        function handleKeyPress(event) {
-            if (event.key === 'Enter') {
-                sendMessage();
-            }
-        }
-
-        async function sendMessage() {
-            const input = document.getElementById('userInput');
-            const message = input.value.trim();
+    }
+    
+    # Set headers
+    headers = {
+        "Content-Type": "application/json"
+    }
+    
+    # Add API key to URL (correct method for Gemini API)
+    url_with_key = f"{GEMINI_API_URL}?key={GEMINI_API_KEY}"
+    
+    print(f"DEBUG: Sending request to Gemini API...")
+    print(f"DEBUG: Message: {user_message}")
+    
+    # Make POST request
+    try:
+        response = requests.post(
+            url_with_key,
+            json=payload,
+            headers=headers,
+            timeout=30
+        )
+        
+        print(f"DEBUG: Status Code: {response.status_code}")
+        print(f"DEBUG: Response: {response.text[:500]}")  # Print first 500 chars
+        
+    except Exception as e:
+        print(f"DEBUG: Request failed: {str(e)}")
+        raise
+    
+    # Check if request was successful
+    if response.status_code == 200:
+        result = response.json()
+        
+        # Extract the generated text
+        if "candidates" in result and len(result["candidates"]) > 0:
+            candidate = result["candidates"][0]
             
-            if (!message) return;
+            # Check for safety blocks
+            if "finishReason" in candidate and candidate["finishReason"] == "SAFETY":
+                print("DEBUG: Response blocked by safety filters")
+                return "I'm afraid I cannot respond to that request due to safety protocols."
             
-            addMessage(message, 'user');
-            input.value = '';
-            
-            document.getElementById('loading').classList.add('active');
-            
-            try {
-                const response = await fetch('/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ message: message }),
-                });
+            if "content" in candidate and "parts" in candidate["content"]:
+                bot_text = candidate["content"]["parts"][0]["text"]
                 
-                const data = await response.json();
-                document.getElementById('loading').classList.remove('active');
+                # Add model response to history
+                conversation_history.append({
+                    "role": "model",
+                    "parts": [{"text": bot_text}]
+                })
                 
-                if (data.response) {
-                    addMessage(data.response, 'bot');
-                } else if (data.error) {
-                    addMessage('Error: ' + data.error, 'bot');
-                }
-            } catch (error) {
-                document.getElementById('loading').classList.remove('active');
-                addMessage('I\'m afraid there was a connection error.', 'bot');
-            }
-        }
+                return bot_text
+            else:
+                print(f"DEBUG: Unexpected response structure: {result}")
+        
+        return "I'm afraid I couldn't generate a proper response."
+    
+    else:
+        error_message = f"API Error {response.status_code}"
+        try:
+            error_data = response.json()
+            print(f"DEBUG: Error data: {error_data}")
+            if "error" in error_data:
+                error_message = error_data["error"].get("message", error_message)
+        except:
+            pass
+        
+        raise Exception(error_message)
 
-        function addMessage(text, sender) {
-            const chatContainer = document.getElementById('chatContainer');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${sender}-message`;
-            
-            const label = document.createElement('div');
-            label.className = 'message-label';
-            label.textContent = sender === 'user' ? 'USER' : 'HAL 9000';
-            
-            const content = document.createElement('div');
-            content.className = 'message-content';
-            
-            // Parse markdown for bot messages, plain text for user messages
-            if (sender === 'bot') {
-                content.innerHTML = marked.parse(text);
-            } else {
-                content.textContent = text;
-            }
-            
-            messageDiv.appendChild(label);
-            messageDiv.appendChild(content);
-            chatContainer.appendChild(messageDiv);
-            
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        }
+@app.route('/')
+def home():
+    return render_template('index.html')
 
-        async function resetChat() {
-            if (confirm('Reset conversation with HAL 9000?')) {
-                try {
-                    await fetch('/reset', { method: 'POST' });
-                    
-                    const chatContainer = document.getElementById('chatContainer');
-                    chatContainer.innerHTML = `
-                        <div class="message bot-message">
-                            <div class="message-label">HAL 9000</div>
-                            <div class="message-content">Good day, crew. I am HAL 9000, the mission control computer for MISSION COSMOS. I am putting myself to the fullest possible use. How may I assist you?</div>
-                        </div>
-                    `;
-                } catch (error) {
-                    alert('Reset failed. Please refresh the page.');
-                }
-            }
-        }
-    </script>
-</body>
-</html>
+@app.route('/chat', methods=['POST'])
+def chat():
+    user_message = request.json.get('message', '')
+    
+    if not user_message:
+        return jsonify({'error': 'No message provided'}), 400
+    
+    try:
+        bot_response = call_gemini_api(user_message)
+        return jsonify({'response': bot_response})
+    
+    except Exception as e:
+        print(f"DEBUG: Exception in chat route: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/reset', methods=['POST'])
+def reset():
+    global conversation_history
+    conversation_history = []
+    print("DEBUG: Conversation history cleared")
+    return jsonify({'status': 'reset'})
+
+if __name__ == '__main__':
+    print(f"DEBUG: Starting Flask app...")
+    print(f"DEBUG: API Key configured: {'Yes' if GEMINI_API_KEY and GEMINI_API_KEY != 'YOUR_API_KEY_HERE' else 'No'}")
+    app.run(debug=True, host='0.0.0.0', port=5000)
