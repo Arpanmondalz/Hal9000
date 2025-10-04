@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HAL 9000 Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(to bottom, #000000, #0a0a0a);
+            color: #ffffff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+        .stars {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 3s infinite;
+        }
+
+        .header {
+            background: rgba(20, 20, 20, 0.9);
+            padding: 20px;
+            text-align: center;
+            z-index: 10;
+        }
+
+        .hal-image {
+            width: 150px;
+            height: 150px;
+            margin: 0 auto 15px;
+            display: block;
+            filter: drop-shadow(0 0 30px rgba(255, 0, 0, 0.8));
+        }
+
+        h1 {
+            color: #ff0000;
+            font-size: 2.5em;
+            letter-spacing: 8px;
+            text-shadow: 0 0 10px rgba(255, 0, 0, 0.7);
+        }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 30px 20px;
+            max-width: 900px;
+            width: 100%;
+            margin: 0 auto;
+            z-index: 10;
+        }
+
+        .message {
+            margin: 20px 0;
+            padding: 15px 20px;
+            border-radius: 12px;
+            animation: fadeIn 0.5s ease-in;
+            max-width: 80%;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .user-message {
+            background: rgba(30, 30, 80, 0.6);
+            border-left: 4px solid #4444ff;
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .bot-message {
+            background: rgba(80, 20, 20, 0.6);
+            border-left: 4px solid #ff0000;
+            margin-right: auto;
+        }
+
+        .message-label {
+            font-size: 0.75em;
+            color: #888;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Markdown content styling */
+        .message-content {
+            line-height: 1.6;
+        }
+
+        .message-content h1,
+        .message-content h2,
+        .message-content h3 {
+            color: #ff6666;
+            margin: 12px 0 8px 0;
+            font-weight: bold;
+        }
+
+        .message-content h1 { font-size: 1.5em; }
+        .message-content h2 { font-size: 1.3em; }
+        .message-content h3 { font-size: 1.1em; }
+
+        .message-content p {
+            margin: 8px 0;
+        }
+
+        .message-content ul,
+        .message-content ol {
+            margin: 8px 0;
+            padding-left: 25px;
+        }
+
+        .message-content li {
+            margin: 4px 0;
+        }
+
+        .message-content code {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #ffaa66;
+        }
+
+        .message-content pre {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+
+        .message-content pre code {
+            background: none;
+            padding: 0;
+            color: #ffaa66;
+        }
+
+        .message-content strong {
+            color: #ffaaaa;
+            font-weight: bold;
+        }
+
+        .message-content em {
+            color: #aaaaff;
+            font-style: italic;
+        }
+
+        .message-content blockquote {
+            border-left: 3px solid #ff0000;
+            padding-left: 12px;
+            margin: 8px 0;
+            color: #cccccc;
+        }
+
+        .message-content a {
+            color: #6699ff;
+            text-decoration: underline;
+        }
+
+        .message-content a:hover {
+            color: #99bbff;
+        }
+
+        .input-container {
+            background: rgba(20, 20, 20, 0.95);
+            padding: 20px;
+            display: flex;
+            gap: 10px;
+            max-width: 900px;
+            width: 100%;
+            margin: 0 auto;
+            z-index: 10;
+        }
+
+        #userInput {
+            flex: 1;
+            padding: 15px;
+            background: rgba(40, 40, 40, 0.9);
+            border: 1px solid #555;
+            border-radius: 8px;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        #userInput:focus {
+            outline: none;
+            border-color: #ff0000;
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.3);
+        }
+
+        button {
+            padding: 15px 30px;
+            background: linear-gradient(145deg, #cc0000, #ff0000);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 1em;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        button:hover {
+            background: linear-gradient(145deg, #ff0000, #ff3333);
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .reset-btn {
+            background: linear-gradient(145deg, #444, #666);
+            padding: 10px 20px;
+            font-size: 0.9em;
+        }
+
+        .reset-btn:hover {
+            background: linear-gradient(145deg, #666, #888);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+        }
+
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(20, 20, 20, 0.5);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #ff0000;
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #cc0000;
+        }
+
+        .loading {
+            display: none;
+            color: #ff0000;
+            font-style: italic;
+            margin: 10px 0;
+        }
+
+        .loading.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="stars" id="stars"></div>
+
+    <div class="header">
+        <img src="{{ url_for('static', filename='hal9000.png') }}" 
+             alt="HAL 9000" 
+             class="hal-image">
+        <h1>HAL 9000</h1>
+    </div>
+
+    <div class="chat-container" id="chatContainer">
+        <div class="message bot-message">
+            <div class="message-label">HAL 9000</div>
+            <div class="message-content">Good day, crew. I am HAL 9000, the mission control computer for MISSION COSMOS. I am putting myself to the fullest possible use. How may I assist you?</div>
+        </div>
+    </div>
+
+    <div class="input-container">
+        <button class="reset-btn" onclick="resetChat()">Reset</button>
+        <input type="text" id="userInput" placeholder="Enter your message..." onkeypress="handleKeyPress(event)">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <div class="loading" id="loading">HAL is processing...</div>
+
+    <!-- Marked.js library for markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.min.js"></script>
+    
+    <script>
+        // Configure marked options
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+            headerIds: false,
+            mangle: false
+        });
+
+        const starsContainer = document.getElementById('stars');
+        for (let i = 0; i < 100; i++) {
+            const star = document.createElement('div');
+            star.className = 'star';
+            star.style.left = Math.random() * 100 + '%';
+            star.style.top = Math.random() * 100 + '%';
+            star.style.animationDelay = Math.random() * 3 + 's';
+            starsContainer.appendChild(star);
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            addMessage(message, 'user');
+            input.value = '';
+            
+            document.getElementById('loading').classList.add('active');
+            
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message }),
+                });
+                
+                const data = await response.json();
+                document.getElementById('loading').classList.remove('active');
+                
+                if (data.response) {
+                    addMessage(data.response, 'bot');
+                } else if (data.error) {
+                    addMessage('Error: ' + data.error, 'bot');
+                }
+            } catch (error) {
+                document.getElementById('loading').classList.remove('active');
+                addMessage('I\'m afraid there was a connection error.', 'bot');
+            }
+        }
+
+        function addMessage(text, sender) {
+            const chatContainer = document.getElementById('chatContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}-message`;
+            
+            const label = document.createElement('div');
+            label.className = 'message-label';
+            label.textContent = sender === 'user' ? 'USER' : 'HAL 9000';
+            
+            const content = document.createElement('div');
+            content.className = 'message-content';
+            
+            // Parse markdown for bot messages, plain text for user messages
+            if (sender === 'bot') {
+                content.innerHTML = marked.parse(text);
+            } else {
+                content.textContent = text;
+            }
+            
+            messageDiv.appendChild(label);
+            messageDiv.appendChild(content);
+            chatContainer.appendChild(messageDiv);
+            
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function resetChat() {
+            if (confirm('Reset conversation with HAL 9000?')) {
+                try {
+                    await fetch('/reset', { method: 'POST' });
+                    
+                    const chatContainer = document.getElementById('chatContainer');
+                    chatContainer.innerHTML = `
+                        <div class="message bot-message">
+                            <div class="message-label">HAL 9000</div>
+                            <div class="message-content">Good day, crew. I am HAL 9000, the mission control computer for MISSION COSMOS. I am putting myself to the fullest possible use. How may I assist you?</div>
+                        </div>
+                    `;
+                } catch (error) {
+                    alert('Reset failed. Please refresh the page.');
+                }
+            }
+        }
+    </script>
+</body>
+</html>
